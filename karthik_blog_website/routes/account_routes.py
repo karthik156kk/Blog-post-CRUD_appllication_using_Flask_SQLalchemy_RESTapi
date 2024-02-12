@@ -1,59 +1,47 @@
-from flask import render_template, url_for, flash, redirect, request
-from karthik_blog_website import app, bcrypt, db
-from karthik_blog_website.models import User
+from flask import render_template, url_for, redirect, request
+from karthik_blog_website import app
 from karthik_blog_website.forms import RegistrationForm, LoginForm, UpdateAccountForm
-from flask_login import login_user, current_user, logout_user, login_required
+from flask_login import logout_user, login_required
+from karthik_blog_website.services.account_services import is_current_user_authenticated, register_user_from_form
+from karthik_blog_website.services.account_services import login_user_from_form, update_user_from_form
 
-#account creation
+#account creation (Create Account)
 @app.route("/register", methods=['GET', 'POST'])
 def register():
-    if current_user.is_authenticated:
-        return redirect(url_for('home'))
-    form = RegistrationForm()
-    if form.validate_on_submit():
-        hashed_pw = bcrypt.generate_password_hash(form.password.data).decode('utf-8')
-        user = User(username = form.username.data, email = form.email.data, password=hashed_pw)
-        db.session.add(user)
-        db.session.commit()
-        flash('Your account has been created; Your can now log in now', 'success')
+    if is_current_user_authenticated():
+        redirect(url_for('home'))
+    register_form = RegistrationForm()
+    if register_user_from_form(register_form):
         return redirect(url_for('login'))
-    return render_template('register.html', title='Register', form = form)
+    else:
+        return render_template('register.html', title='Register', form = register_form)
 
-#account accessing
+#account accessing (Retrieve Account)
 @app.route("/login", methods=['GET', 'POST'])
 def login():
-    if current_user.is_authenticated:
+    if is_current_user_authenticated():
         return redirect(url_for('home'))
-    form = LoginForm()
-    if form.validate_on_submit():
-        user = User.query.filter_by(email = form.email.data).first()
-        if user and bcrypt.check_password_hash(user.password, form.password.data):
-            login_user(user, remember=form.remember.data)
-            next_page = request.args.get('next')
-            flash('Logged in successfully', 'success')
-            return redirect(next_page) if next_page else redirect(url_for('home'))
-        flash('Enter the valid email and password', 'danger')
-    return render_template('login.html', title='Log in', form = form)
+    login_form = LoginForm()
+    success, login_form = login_user_from_form(login_form)
+    if success:
+        next_page = request.args.get('next')
+        return redirect(next_page or url_for('home'))
+    return render_template('login.html', title='Log in', form=login_form)
 
-#account accessing
+#account accessing (Retrieve Account)
 @app.route('/logout')
 def logout():
     logout_user()
     return redirect(url_for('home'))
 
-#account updation
+#account updation (Update Account)
 @app.route('/account', methods=['GET', 'POST'])
 @login_required
 def account():
-    form = UpdateAccountForm()
-    if form.validate_on_submit():
-        current_user.username = form.username.data
-        current_user.email = form.email.data
-        db.session.commit()
-        flash('Your account has been updated!', 'success')
+    updation_form = UpdateAccountForm()
+    success, updation_form, image_file = update_user_from_form(updation_form, request.method)
+    if success:
         return redirect(url_for('account'))
-    elif request.method == 'GET':
-        form.username.data = current_user.username
-        form.email.data = current_user.email
-    image_file = url_for('static', filename='profile_pics/' + current_user.image_file)
-    return render_template('account.html', title='Account', image_file=image_file, form=form)
+    else:
+        return render_template('account.html', title='Account', image_file=image_file, form=updation_form)
+    

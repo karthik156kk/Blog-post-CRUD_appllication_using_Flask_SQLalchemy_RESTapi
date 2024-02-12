@@ -1,55 +1,47 @@
-from flask import render_template, url_for, flash, redirect, request, abort
-from karthik_blog_website import app, db
-from karthik_blog_website.models import Post
+from flask import render_template, url_for, redirect, request, abort
+from karthik_blog_website import app
 from karthik_blog_website.forms import PostForm
-from flask_login import current_user, login_required
-
-#create a new post
+from flask_login import login_required
+from karthik_blog_website.services.post_services import new_post_from_form, is_author_not_current_user, get_post_if_available
+from karthik_blog_website.services.post_services import update_post_in_database, delete_post_in_database
+#create a new post (Create Post)
 @app.route("/post/new", methods=['GET', 'POST'])
 @login_required
 def new_post():
-    form = PostForm()
-    if form.validate_on_submit():
-        post = Post(title=form.title.data, content=form.content.data, author=current_user)
-        db.session.add(post)
-        db.session.commit()
-        flash('Your post has been created!', 'success')
+    new_post_form = PostForm()
+    if new_post_from_form(new_post_form):
         return redirect(url_for('home'))
-    return render_template('create_update_post.html', title='New Post', form=form, legend='Create New Post')
-
-#read a specific post 
+    else:
+        return render_template('create_update_post.html',
+            title='New Post', form=new_post_form, legend='Create New Post')
+    
+#read a specific post (Retrieve Post)
 @app.route("/post/<int:post_id>")
 def post(post_id):
-    post = Post.query.get_or_404(post_id)
-    return render_template('post.html', title='Post title', post=post)
+    read_post = get_post_if_available(post_id)
+    return render_template('post.html', title='Post title', post=read_post)
 
-#update a specific post - must be logged in
+#update a specific post - must be logged in (Update Post)
 @app.route("/post/<int:post_id>/update", methods=['GET', 'POST'])
 @login_required
 def update_post(post_id):
-    post = Post.query.get_or_404(post_id)
-    if post.author != current_user:
+    update_post = get_post_if_available(post_id)
+    if is_author_not_current_user(update_post.author):
         abort(403)
-    form = PostForm()
-    if form.validate_on_submit():
-        post.title = form.title.data
-        post.content = form.content.data
-        db.session.commit()
-        flash('Your post has been updated!', 'success')
-        return redirect(url_for('post', post_id=post.id))
-    elif request.method == 'GET':
-        form.title.data = post.title
-        form.content.data = post.content
-    return render_template('create_update_post.html', title='Post title', form=form, legend='Update Post')
+    update_post_form = PostForm()
+    success, update_post, update_post_form = update_post_in_database(update_post, update_post_form, request.method)
+    if(success):
+        return redirect(url_for('post', post_id=update_post.id))
+    else:
+        return render_template('create_update_post.html', title='Post title', form=update_post_form, legend='Update Post')
 
-#delete a specific post - must be logged in
+
+#delete a specific post - must be logged in (Delete Post)
 @app.route("/post/<int:post_id>/delete", methods=['GET', 'POST'])
 @login_required
 def delete_post(post_id):
-    post = Post.query.get_or_404(post_id)
-    if post.author != current_user:
+    delete_post = get_post_if_available(post_id)
+    if is_author_not_current_user(delete_post.author):
         abort(403)
-    db.session.delete(post)
-    db.session.commit()
-    flash('Your post has been Deleted!', 'success')
+    delete_post_in_database(delete_post)
     return redirect(url_for('home'))

@@ -53,4 +53,3 @@ def test_update_account(client, updated_username, updated_email, expected_messag
             updated_user = User.query.filter_by(email=updated_email).first()
             assert updated_user is not None
             assert updated_user.username == updated_username
-
